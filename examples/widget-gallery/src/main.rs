@@ -26,7 +26,8 @@ use floem::{
     new_window,
     prelude::*,
     style::{Background, CursorStyle, Transition},
-    window::{WindowConfig, WindowId},
+    ui_events::keyboard::{KeyState, KeyboardEvent},
+    window::WindowConfig,
 };
 
 fn app_view(window_id: WindowId) -> impl IntoView {
@@ -305,8 +306,13 @@ fn app_view(window_id: WindowId) -> impl IntoView {
     );
 
     view.on_event_stop(EventListener::KeyUp, move |e| {
-        if let Event::KeyUp(e) = e {
-            if e.key.logical_key == Key::Named(NamedKey::F11) {
+        if let Event::Key(KeyboardEvent {
+            state: KeyState::Up,
+            key,
+            ..
+        }) = e
+        {
+            if *key == Key::Named(NamedKey::F11) {
                 floem::action::inspect();
             } else if e.key.logical_key == Key::Character("q".into())
                 && e.modifiers.contains(Modifiers::META)

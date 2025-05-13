@@ -5,8 +5,8 @@ use std::ops::RangeInclusive;
 use floem_reactive::{create_updater, SignalGet, SignalUpdate};
 use peniko::color::palette;
 use peniko::kurbo::{Circle, Point, RoundedRect, RoundedRectRadii};
-use peniko::Brush;
-use winit::keyboard::{Key, NamedKey};
+use ui_events::keyboard::{Key, KeyState, KeyboardEvent, NamedKey};
+use ui_events::pointer::PointerEvent;
 
 use crate::style::{
     BorderBottomLeftRadius, BorderBottomRightRadius, BorderTopLeftRadius, BorderTopRightRadius,
@@ -14,6 +14,7 @@ use crate::style::{
 };
 use crate::unit::Pct;
 use crate::{
+    Renderer,
     event::EventPropagation,
     id::ViewId,
     prop, prop_extractor,
@@ -22,7 +23,6 @@ use crate::{
     unit::{PxPct, PxPctAuto},
     view::View,
     views::Decorators,
-    Renderer,
 };
 
 /// Creates a new [Slider] with a function that returns a percentage value.
@@ -142,34 +142,34 @@ impl View for Slider {
         event: &crate::event::Event,
     ) -> EventPropagation {
         let pos_changed = match event {
-            crate::event::Event::PointerDown(event) => {
+            crate::event::Event::Pointer(PointerEvent::Down { state, .. }) => {
                 cx.update_active(self.id());
                 self.id.request_layout();
                 self.held = true;
-                self.percent = self.mouse_pos_to_percent(event.pos.x);
+                self.percent = self.mouse_pos_to_percent(state.position.x);
                 true
             }
-            crate::event::Event::PointerUp(event) => {
+            crate::event::Event::Pointer(PointerEvent::Up { state, .. }) => {
                 self.id.request_layout();
 
                 // set the state based on the position of the slider
                 let changed = self.held;
                 if self.held {
-                    self.percent = self.mouse_pos_to_percent(event.pos.x);
+                    self.percent = self.mouse_pos_to_percent(state.position.x);
                     self.update_restrict_position();
                 }
                 self.held = false;
                 changed
             }
-            crate::event::Event::PointerMove(event) => {
+            crate::event::Event::Pointer(PointerEvent::Move(pu)) => {
                 self.id.request_layout();
                 if self.held {
-                    self.percent = self.mouse_pos_to_percent(event.pos.x);
+                    self.percent = self.mouse_pos_to_percent(pu.current.position.x);
                     true
                 } else {
                     // Call hover callback with the percentage at the current position
                     if let Some(onhover) = &self.onhover {
-                        let hover_percent = self.mouse_pos_to_percent(event.pos.x);
+                        let hover_percent = self.mouse_pos_to_percent(pu.current.position.x);
                         onhover(Pct(hover_percent));
                     }
                     false
@@ -179,12 +179,16 @@ impl View for Slider {
                 self.held = false;
                 false
             }
-            crate::event::Event::KeyDown(event) => {
-                if event.key.logical_key == Key::Named(NamedKey::ArrowLeft) {
+            crate::event::Event::Key(KeyboardEvent {
+                state: KeyState::Down,
+                key,
+                ..
+            }) => {
+                if *key == Key::Named(NamedKey::ArrowLeft) {
                     self.id.request_layout();
                     self.percent -= 10.;
                     true
-                } else if event.key.logical_key == Key::Named(NamedKey::ArrowRight) {
+                } else if *key == Key::Named(NamedKey::ArrowRight) {
                     self.id.request_layout();
                     self.percent += 10.;
                     true
@@ -668,11 +672,14 @@ impl SliderCustomStyle {
 #[cfg(test)]
 mod test {
 
+    use ui_events::pointer::{
+        PointerButton, PointerInfo, PointerState, PointerType, PointerUpdate,
+    };
+
     use crate::{
+        AppState,
         context::{EventCx, UpdateCx},
         event::Event,
-        pointer::{MouseButton, PointerButton, PointerInputEvent, PointerMoveEvent},
-        AppState,
     };
 
     use super::*;
@@ -736,13 +743,21 @@ mod test {
             height: 20.0,
         };
 
-        // Test pointer down at 75% position
-        let mouse_x = 75.0;
-        let pointer_down = Event::PointerDown(PointerInputEvent {
-            count: 1,
-            pos: Point::new(mouse_x, 10.0),
-            button: PointerButton::Mouse(MouseButton::Primary),
-            modifiers: Default::default(),
+        let mouse_x = 75.;
+
+        // Test pointer down at 75%
+        let pointer_down = Event::Pointer(PointerEvent::Down {
+            state: PointerState {
+                position: Point::new(mouse_x, 10.0),
+                count: 1,
+                ..Default::default()
+            },
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
         });
 
         slider.event_before_children(&mut cx, &pointer_down);
@@ -770,12 +785,21 @@ mod test {
             height: 20.0,
         };
 
+        let move_mouse_x = 75.;
+
         // Start drag
-        let pointer_down = Event::PointerDown(PointerInputEvent {
-            pos: Point::new(50.0, 10.0),
-            button: PointerButton::Mouse(MouseButton::Primary),
-            count: 1,
-            modifiers: Default::default(),
+        let pointer_down = Event::Pointer(PointerEvent::Down {
+            state: PointerState {
+                position: Point::new(50.0, 10.0),
+                count: 1,
+                ..Default::default()
+            },
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
         });
 
         slider.event_before_children(&mut cx, &pointer_down);
@@ -783,12 +807,20 @@ mod test {
         assert_eq!(cx.app_state.active, Some(slider.id()));
 
         // Move while dragging
-        let move_mouse_x = 75.0;
-        let pointer_move = Event::PointerMove(PointerMoveEvent {
-            pos: Point::new(move_mouse_x, 10.0),
-            modifiers: Default::default(),
-        });
-
+        let pointer_move = Event::Pointer(PointerEvent::Move(PointerUpdate {
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
+            current: PointerState {
+                position: Point::new(move_mouse_x, 10.0),
+                count: 1,
+                ..Default::default()
+            },
+            coalesced: Vec::new(),
+            predicted: Vec::new(),
+        }));
         slider.event_before_children(&mut cx, &pointer_move);
 
         // Calculate expected percentage using the same logic as the slider
@@ -801,11 +833,18 @@ mod test {
         assert_eq!(slider.percent, expected_percent);
 
         // End drag
-        let pointer_up = Event::PointerUp(PointerInputEvent {
-            pos: Point::new(75.0, 10.0),
-            button: PointerButton::Mouse(MouseButton::Primary),
-            count: 1,
-            modifiers: Default::default(),
+        let pointer_up = Event::Pointer(PointerEvent::Up {
+            state: PointerState {
+                position: Point::new(75.0, 10.0),
+                count: 1,
+                ..Default::default()
+            },
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
         });
 
         slider.event_before_children(&mut cx, &pointer_up);
@@ -814,8 +853,8 @@ mod test {
 
     #[test]
     fn test_callback_handling() {
-        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
 
         let callback_called = Arc::new(AtomicBool::new(false));
         let callback_called_clone = callback_called.clone();
@@ -831,11 +870,18 @@ mod test {
             height: 20.0,
         };
 
-        let pointer_event = Event::PointerDown(PointerInputEvent {
-            pos: Point::new(60.0, 10.0),
-            button: PointerButton::Mouse(MouseButton::Primary),
-            count: 1,
-            modifiers: Default::default(),
+        let pointer_event = Event::Pointer(PointerEvent::Down {
+            state: PointerState {
+                position: Point::new(60.0, 10.0),
+                count: 1,
+                ..Default::default()
+            },
+            button: Some(PointerButton::Primary),
+            pointer: PointerInfo {
+                pointer_id: None,
+                persistent_device_id: None,
+                pointer_type: PointerType::Mouse,
+            },
         });
 
         slider.event_before_children(&mut cx, &pointer_event);

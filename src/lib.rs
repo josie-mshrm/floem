@@ -198,17 +198,14 @@ pub mod file;
 pub mod file_action;
 pub(crate) mod id;
 mod inspector;
-pub mod keyboard;
 pub mod menu;
 mod nav;
-pub mod pointer;
 mod profiler;
 mod renderer;
 pub mod responsive;
 mod screen_layout;
 pub mod style;
 pub(crate) mod theme;
-pub mod touchpad;
 pub mod unit;
 mod update;
 pub(crate) mod view;
@@ -221,6 +218,7 @@ mod window_handle;
 mod window_id;
 mod window_tracking;
 
+pub use app::{AppConfig, AppEvent, Application, launch, quit_app};
 pub use app::{AppConfig, AppEvent, Application, launch, quit_app, reopen};
 pub use app_state::AppState;
 pub use clipboard::{Clipboard, ClipboardError};
@@ -236,9 +234,14 @@ pub use peniko;
 pub use peniko::kurbo;
 pub use screen_layout::ScreenLayout;
 pub use taffy;
+pub use ui_events;
 pub use view::{AnyView, IntoView, View, recursively_layout_view};
 pub use window::{close_window, new_window};
 pub use window_id::{Urgency, WindowIdExt};
+
+pub mod keyboard {
+    pub use ui_events::keyboard::{Key, NamedKey};
+}
 
 pub mod prelude {
     pub use crate::Renderer;

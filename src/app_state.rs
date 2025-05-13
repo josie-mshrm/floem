@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use muda::MenuId;
 use peniko::kurbo::{Point, Size};
 use taffy::{AvailableSpace, NodeId};
-use winit::window::{CursorIcon, Theme};
+use winit::{cursor::CursorIcon, window::Theme};
 
 use crate::{
     context::{DragState, FrameUpdate, InteractionState},
